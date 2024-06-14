@@ -1,0 +1,145 @@
+AWSTemplateFormatVersion: '2010-09-09'
+
+Description: This template deploys a VPC with 3 public subnets on 3 different availability zones and an Internet Gateway, with a default route on the public subnets.
+
+
+Parameters:
+ EnvName:
+   Description: Name that will be used on resources
+   Type: String
+   Default: LUIT
+ 
+ VPCCIDR:
+   Description: Please enter the IPv4 CIDR for this VPC
+   Type: String
+   Default: 10.10.0.0/16
+
+ PublicSubnetACIDR:
+   Description: Please enter the IPv4 CIDR for this Public Subnet A
+   Type: String
+   Default: 10.10.1.0/24
+ PublicSubnetBCIDR:
+   Description: Please enter the IPv4 CIDR for this Public Subnet B
+   Type: String
+   Default: 10.10.2.0/24
+ PublicSubnetCCIDR:
+   Description: Please enter the IPv4 CIDR for this Public Subnet C
+   Type: String
+   Default: 10.10.3.0/24
+
+
+Resources:
+ VPC:
+   Type: AWS::EC2::VPC
+   Properties:
+     CidrBlock: !Ref VPCCIDR
+     EnableDnsSupport: true
+     EnableDnsHostnames: true
+     Tags:
+      - Key: Name
+        Value: !Ref EnvName
+
+ InternetGateway:
+   Type: AWS::EC2::InternetGateway
+   Properties:
+     Tags:
+      - Key: Name
+        Value: !Ref EnvName
+
+ InternetGatewayAttachment:
+   Type: AWS::EC2::VPCGatewayAttachment
+   Properties:
+     InternetGatewayId: !Ref InternetGateway
+     VpcId: !Ref VPC
+
+ PublicSubnetA:
+   Type: AWS::EC2::Subnet
+   Properties:
+     VpcId: !Ref VPC
+     CidrBlock: !Ref PublicSubnetACIDR
+     MapPublicIpOnLaunch: true
+     AvailabilityZone: "us-east-2a"
+     #AvailabilityZone: !Select [ 0, !GetAZs '' ]
+     Tags:
+     - Key: Name
+       Value: !Sub ${EnvName} Public Subnet A
+ PublicSubnetB:
+   Type: AWS::EC2::Subnet
+   Properties:
+     VpcId: !Ref VPC
+     CidrBlock: !Ref PublicSubnetBCIDR
+     MapPublicIpOnLaunch: true
+     AvailabilityZone: "us-east-2b"
+     #AvailabilityZone: !Select [ 1, !GetAZs '' ]
+     Tags:
+     - Key: Name
+       Value: !Sub ${EnvName} Public Subnet B
+ PublicSubnetC:
+   Type: AWS::EC2::Subnet
+   Properties:
+     VpcId: !Ref VPC
+     CidrBlock: !Ref PublicSubnetCCIDR
+     MapPublicIpOnLaunch: true
+     AvailabilityZone: "us-east-2c"
+     #AvailabilityZone: !Select [ 2, !GetAZs '' ]
+     Tags:
+     - Key: Name
+       Value: !Sub ${EnvName} Public Subnet C
+
+ PublicRouteTable:
+   Type: AWS::EC2::RouteTable
+   Properties:
+     Tags:
+      - Key: Name
+        Value: !Sub ${EnvName} Public Route Table
+     VpcId: !Ref VPC
+
+ DefaultPublicRoute:
+   Type: AWS::EC2::Route
+   DependsOn: InternetGatewayAttachment
+   Properties:
+     DestinationCidrBlock: 0.0.0.0/0
+     GatewayId: !Ref InternetGateway
+     RouteTableId: !Ref PublicRouteTable
+
+ PublicSubnetARouteTableAssociation:
+  Type: AWS::EC2::SubnetRouteTableAssociation
+  Properties:
+    RouteTableId: !Ref PublicRouteTable
+    SubnetId: !Ref PublicSubnetA
+ PublicSubnetBRouteTableAssociation:
+  Type: AWS::EC2::SubnetRouteTableAssociation
+  Properties:
+    RouteTableId: !Ref PublicRouteTable
+    SubnetId: !Ref PublicSubnetB
+ PublicSubnetCRouteTableAssociation:
+  Type: AWS::EC2::SubnetRouteTableAssociation
+  Properties:
+    RouteTableId: !Ref PublicRouteTable
+    SubnetId: !Ref PublicSubnetC
+
+
+Outputs:
+  VPC:
+    Description: ID of created VPC
+    Value: !Ref VPC
+    Export:
+      Name: VPC
+  PublicSubnets:
+    Description: CIDR of public subnets created
+    Value: !Join [ ",", [ !Ref PublicSubnetACIDR, !Ref PublicSubnetBCIDR, !Ref PublicSubnetCCIDR ] ]
+  PublicSubnetA:
+    Description: ID of created public subnet A
+    Value: !Ref PublicSubnetA
+    Export:
+      Name: PublicSubnetA
+  PublicSubnetB:
+    Description: ID of created public subnet B
+    Value: !Ref PublicSubnetB
+    Export:
+      Name: PublicSubnetB
+  PublicSubnetC:
+    Description: ID of created public subnet C
+    Value: !Ref PublicSubnetC
+    Export:
+      Name: PublicSubnetC

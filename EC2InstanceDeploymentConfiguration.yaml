@@ -1,0 +1,32 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'EC2 Instance Stack'
+
+Resources:
+  WebServerInstance:
+    Type: 'AWS::EC2::Instance'
+    Properties:
+      InstanceType: t2.micro
+      ImageId: ami-08a0d1e16fc3f61ea # Specify your AMI ID
+      KeyName: ericKey # Specify your key pair name
+      SecurityGroupIds:
+        - sg-0d957153d89339c61 # Specify your security group ID
+      SubnetId: subnet-0b454955812fbab80 # Specify your subnet ID
+
+  DatabaseServerInstance:
+    Type: 'AWS::EC2::Instance'
+    Properties:
+      InstanceType: t2.micro
+      ImageId: ami-08a0d1e16fc3f61ea # Specify your AMI ID
+      KeyName: ericKey # Specify your key pair name
+      SecurityGroupIds:
+        - sg-0d957153d89339c61 # Specify your security group ID
+      SubnetId: subnet-0b454955812fbab80 # Specify your subnet ID
+
+Outputs:
+  WebServerInstanceId:
+    Description: 'Web Server Instance ID'
+    Value: !Ref WebServerInstance
+
+  DatabaseServerInstanceId:
+    Description: 'Database Server Instance ID'
+    Value: !Ref DatabaseServerInstance

@@ -1,0 +1,161 @@
+AWSTemplateFormatVersion: '2010-09-09'
+
+Description: This template deploys a Security Group that allows inbound traffic on SSH and HTTP, an Auto Scaling Group with a Launch Template that installs Apache on Amazon Linux and scaling up and down policies, and an Application Load Balancer.
+
+
+Resources:
+
+ SecurityGroup:
+   Type: AWS::EC2::SecurityGroup
+   Properties:
+     GroupDescription: Allow inbound HTTP and SSH traffic
+     GroupName: "String"
+     SecurityGroupIngress:
+       - IpProtocol: tcp
+         FromPort: 80
+         ToPort: 80
+         CidrIp: 0.0.0.0/0
+       - IpProtocol: tcp
+         FromPort: 22
+         ToPort: 22
+         CidrIp: 0.0.0.0/0
+     Tags:
+      - Key: Name
+        Value: WebServer
+     VpcId: !ImportValue VPC
+
+
+ LaunchTemplate:
+   Type: AWS::EC2::LaunchTemplate
+   Properties:
+     LaunchTemplateData:
+       ImageId: ami-033fabdd332044f06
+       InstanceType: t2.micro
+       KeyName: Sprint2Key
+       Monitoring:
+         Enabled: true
+       SecurityGroupIds:
+         - !Ref SecurityGroup
+       UserData: 
+         Fn::Base64: !Sub |
+           #! /bin/bash
+           yum update -y
+           yum install -y httpd
+           systemctl start httpd
+           systemctl enable httpd
+           EC2AZ=$(curl -s http://169.254.169.254/latest/meta-data/placement/availability-zone) 
+           echo '<center><h1>This Amazon EC2 instance is located in Availability Zone: AZID </h1></center>' > /var/www/html/index.txt
+           sed "s/AZID/$EC2AZ/" /var/www/html/index.txt > /var/www/html/index.html
+     LaunchTemplateName: LUIT-WebServer
+
+
+ ApplicationLoadBalancer:
+   Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+   Properties:
+     IpAddressType: ipv4
+     Name: LUIT
+     Scheme: internet-facing
+     SecurityGroups:
+       - !Ref SecurityGroup
+     Subnets:
+       - !ImportValue "PublicSubnetA"
+       - !ImportValue "PublicSubnetB"
+       - !ImportValue "PublicSubnetC"
+     Type: application
+
+ ApplicationLoadBalancerTargetGroup:
+   Type: AWS::ElasticLoadBalancingV2::TargetGroup
+   Properties:
+     Name: LUIT
+     Port: 80
+     Protocol: HTTP
+     TargetType: instance
+     VpcId: !ImportValue VPC
+
+ ApplicationLoadBalancerListener:
+   Type: AWS::ElasticLoadBalancingV2::Listener
+   Properties:
+     DefaultActions:
+       - Type: forward
+         TargetGroupArn: !Ref ApplicationLoadBalancerTargetGroup
+     LoadBalancerArn: !Ref ApplicationLoadBalancer
+     Port: 80
+     Protocol: HTTP
+
+
+ AutoScalingGroup:
+   Type: AWS::AutoScaling::AutoScalingGroup
+   Properties:
+     AutoScalingGroupName: LUIT-ASG
+     AvailabilityZones:
+       - us-east-2a
+       - us-east-2b
+       - us-east-2c
+     DesiredCapacity: 2
+     LaunchTemplate:
+       LaunchTemplateId: !Ref LaunchTemplate
+       Version: !GetAtt LaunchTemplate.LatestVersionNumber
+     MaxSize: 5
+     MinSize: 2
+     VPCZoneIdentifier:
+       - !ImportValue 'PublicSubnetA'
+       - !ImportValue 'PublicSubnetB'
+       - !ImportValue 'PublicSubnetC'
+     TargetGroupARNs:
+       - !Ref ApplicationLoadBalancerTargetGroup
+
+ ScalingUPPolicy:
+   Type: AWS::AutoScaling::ScalingPolicy
+   Properties:
+     AdjustmentType: ChangeInCapacity
+     AutoScalingGroupName: !Ref AutoScalingGroup
+     Cooldown: 60
+     ScalingAdjustment: 1
+ ScalingDOWNPolicy:
+   Type: AWS::AutoScaling::ScalingPolicy
+   Properties:
+     AdjustmentType: ChangeInCapacity
+     AutoScalingGroupName: !Ref AutoScalingGroup
+     Cooldown: 60
+     ScalingAdjustment: -1
+
+
+ CPUAlarmHigh:
+   Type: AWS::CloudWatch::Alarm
+   Properties:
+     AlarmActions:
+       - !Ref ScalingUPPolicy
+     AlarmDescription: Scale up if CPU > 50% for 10 minutes
+     ComparisonOperator: GreaterThanThreshold
+     Dimensions:
+       - Name: AutoScalingGroupName
+         Value: !Ref AutoScalingGroup
+     MetricName: CPUUtilization
+     Namespace: AWS/EC2
+     Period: 300
+     EvaluationPeriods: 2
+     Statistic: Average
+     Threshold: 50
+
+ CPUAlarmDown:
+   Type: AWS::CloudWatch::Alarm
+   Properties:
+     AlarmActions:
+       - !Ref ScalingDOWNPolicy
+     AlarmDescription: Scale down if CPU < 50% for 10 minutes
+     ComparisonOperator: LessThanThreshold
+     Dimensions:
+       - Name: AutoScalingGroupName
+         Value: !Ref AutoScalingGroup
+     MetricName: CPUUtilization
+     Namespace: AWS/EC2
+     Period: 300
+     EvaluationPeriods: 2
+     Statistic: Average
+     Threshold: 50
+
+
+Outputs:
+  ApplicationLoadBalancer:
+    Description: The DNSName of the Application Load Balancer
+    Value: !GetAtt ApplicationLoadBalancer.DNSName
